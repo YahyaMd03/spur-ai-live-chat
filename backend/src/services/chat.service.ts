@@ -90,7 +90,7 @@ export class ChatService {
       });
 
       // Convert to typed format for LLM service
-      const typedHistory: Array<{ sender: Sender; text: string }> = history.map((msg) => ({
+      const typedHistory: Array<{ sender: Sender; text: string }> = history.map((msg: { sender: string; text: string }) => ({
         sender: (msg.sender === 'user' || msg.sender === 'ai' ? msg.sender : 'ai') as Sender,
         text: msg.text,
       }));
@@ -154,7 +154,7 @@ export class ChatService {
       });
 
       // Type-safe conversion: ensure sender is 'user' | 'ai'
-      const typedMessages = messages.map((msg) => ({
+      const typedMessages = messages.map((msg: { id: string; sender: string; text: string; createdAt: Date }) => ({
         id: msg.id,
         sender: (msg.sender === 'user' || msg.sender === 'ai' ? msg.sender : 'ai') as Sender,
         text: msg.text,
