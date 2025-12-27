@@ -25,6 +25,7 @@ export default function ChatWidget() {
   const hasLoadedRef = useRef(false);
   const isInitialLoadRef = useRef(true);
   const justSentMessageRef = useRef(false);
+  const waitingForAIResponseRef = useRef(false);
 
   // Load session and messages from localStorage on mount
   useEffect(() => {
@@ -105,6 +106,10 @@ export default function ChatWidget() {
           setShowScrollToBottom(false);
         });
       } else {
+        const lastMessage = messages[messages.length - 1];
+        const isNewAIMessage =
+          lastMessage.sender === "ai" && waitingForAIResponseRef.current;
+
         // If user just sent a message, always scroll to bottom
         if (justSentMessageRef.current) {
           requestAnimationFrame(() => {
@@ -112,8 +117,15 @@ export default function ChatWidget() {
             setShowScrollToBottom(false);
             justSentMessageRef.current = false;
           });
+        } else if (isNewAIMessage) {
+          // When a new AI message arrives (after user sent a message), always scroll to bottom
+          requestAnimationFrame(() => {
+            messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+            setShowScrollToBottom(false);
+            waitingForAIResponseRef.current = false;
+          });
         } else {
-          // For other message updates (like AI responses), only auto-scroll if user is near bottom
+          // For other message updates, only auto-scroll if user is near bottom
           const container = messagesContainerRef.current;
           if (container) {
             const isNearBottom =
@@ -185,6 +197,7 @@ export default function ChatWidget() {
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setIsLoading(true);
+    waitingForAIResponseRef.current = true;
 
     apiClient
       .post("/chat/message", {
@@ -216,6 +229,7 @@ export default function ChatWidget() {
           timestamp: new Date(),
         };
         setMessages((prev) => [...prev, errorMsg]);
+        waitingForAIResponseRef.current = true; // Mark as waiting so it auto-scrolls
       })
       .finally(() => {
         setIsLoading(false);
@@ -257,6 +271,7 @@ export default function ChatWidget() {
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setIsLoading(true);
+    waitingForAIResponseRef.current = true;
 
     try {
       const response = await apiClient.post("/chat/message", {
@@ -289,6 +304,7 @@ export default function ChatWidget() {
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, errorMsg]);
+      waitingForAIResponseRef.current = true; // Mark as waiting so it auto-scrolls
     } finally {
       setIsLoading(false);
       inputRef.current?.focus();

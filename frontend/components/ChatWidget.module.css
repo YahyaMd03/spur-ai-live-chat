@@ -19,6 +19,38 @@
   }
 }
 
+@media (max-width: 768px) {
+  .container {
+    width: 100vw;
+    min-width: 100vw;
+    max-width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+  }
+
+  .messagesContainer {
+    flex: 1;
+    min-height: 0;
+    padding-bottom: 10px;
+  }
+
+  .inputContainer {
+    flex-shrink: 0;
+    padding: 12px 16px;
+  }
+
+  .scrollToBottomButton {
+    bottom: 90px;
+    right: 16px;
+  }
+}
+
 .header {
   background: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--primary-600)) 100%);
   color: hsl(var(--primary-foreground));
@@ -26,6 +58,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-shrink: 0;
 }
 
 .logoContainer {
@@ -59,6 +92,8 @@
   gap: 16px;
   background: hsl(var(--muted));
   position: relative;
+  min-height: 0;
+  -webkit-overflow-scrolling: touch;
 }
 
 .messagesContainer::-webkit-scrollbar {
@@ -255,6 +290,7 @@
   background: hsl(var(--card));
   border-top: 1px solid hsl(var(--border));
   align-items: flex-end;
+  flex-shrink: 0;
 }
 
 .input {

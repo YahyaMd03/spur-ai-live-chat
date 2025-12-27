@@ -91,6 +91,23 @@
   animation: slideUp 0.3s ease-out;
 }
 
+@media (max-width: 768px) {
+  .chatContainer {
+    bottom: 0;
+    right: 0;
+    left: 0;
+    top: 0;
+    width: 100vw;
+    height: 100dvh;
+    position: fixed;
+  }
+
+  .closeButton {
+    top: 12px;
+    right: 12px;
+  }
+}
+
 @keyframes slideUp {
   from {
     opacity: 0;
