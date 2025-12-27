@@ -43,14 +43,7 @@ export default function Home() {
         <div className={styles.rightSection}>
           {isChatOpen && (
             <div className={styles.chatContainer}>
-              <button
-                className={styles.closeButton}
-                onClick={() => setIsChatOpen(false)}
-                aria-label="Close chat"
-              >
-                ×
-              </button>
-              <ChatWidget />
+              <ChatWidget onClose={() => setIsChatOpen(false)} />
             </div>
           )}
         </div>

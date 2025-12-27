@@ -59,6 +59,17 @@
   align-items: center;
   gap: 10px;
   flex-shrink: 0;
+  cursor: pointer;
+  user-select: none;
+  transition: opacity 0.2s;
+}
+
+.header:hover {
+  opacity: 0.9;
+}
+
+.header:active {
+  opacity: 0.8;
 }
 
 .logoContainer {
@@ -77,6 +88,16 @@
   font-size: 16px;
   font-weight: 600;
   margin: 0;
+  flex: 1;
+}
+
+.minimizeIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  opacity: 0.9;
 }
 
 .subtitle {

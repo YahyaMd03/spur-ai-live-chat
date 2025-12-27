@@ -11,7 +11,11 @@ interface Message {
   timestamp: Date;
 }
 
-export default function ChatWidget() {
+interface ChatWidgetProps {
+  onClose?: () => void;
+}
+
+export default function ChatWidget({ onClose }: ChatWidgetProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -320,7 +324,18 @@ export default function ChatWidget() {
 
   return (
     <div className={styles.container}>
-      <div className={styles.header}>
+      <div
+        className={styles.header}
+        onClick={onClose}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onClose?.();
+          }
+        }}
+      >
         <div className={styles.logoContainer}>
           <svg
             className={styles.logo}
@@ -339,6 +354,20 @@ export default function ChatWidget() {
           </svg>
         </div>
         <h1 className={styles.title}>Spur Support</h1>
+        <div className={styles.minimizeIcon}>
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+        </div>
       </div>
 
       <div ref={messagesContainerRef} className={styles.messagesContainer}>
