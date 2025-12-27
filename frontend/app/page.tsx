@@ -1,0 +1,65 @@
+'use client';
+
+import { useState } from 'react';
+import ChatWidget from '@/components/ChatWidget';
+import FloatingChatButton from '@/components/FloatingChatButton';
+import styles from './page.module.css';
+
+export default function Home() {
+  const [isChatOpen, setIsChatOpen] = useState(false);
+
+  return (
+    <main className={styles.main}>
+      <div className={styles.content}>
+        <div className={styles.leftSection}>
+          <div className={styles.logoContainer}>
+            <svg
+              className={styles.logo}
+              viewBox="0 0 143 180"
+              fill="currentColor"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path d="M97.6942 41.4769C102.953 41.4769 107.908 41.3299 112.848 41.5225C117.276 41.6947 121.897 41.5427 126.077 42.7536C138.363 46.3154 145.208 59.2401 141.753 71.6125C137.137 88.1547 132.521 104.702 127.683 121.178C120.63 145.189 99.1027 161.087 73.6333 161.285C64.7922 161.356 55.9512 161.244 47.1101 161.366C45.8282 161.386 44.3134 161.964 43.3305 162.795C38.4311 166.919 33.6889 171.225 28.8706 175.451C19.2037 183.922 4.17133 179.322 0.903426 166.863C0.589302 165.662 0.538637 164.365 0.538637 163.109C0.523438 130.171 0.523438 97.2339 0.523438 64.3015C0.523438 53.3933 9.27838 43.2755 20.1157 41.9582C24.5235 41.4211 29.0074 41.4769 33.9017 41.2438C33.9017 38.6295 33.6585 35.8581 33.9574 33.1526C34.4032 29.1602 34.7224 25.031 36.0093 21.2767C40.7415 7.48559 54.8213 -1.12749 69.3774 0.438064C83.6346 1.97322 95.6625 13.6465 97.3953 27.853C97.8107 31.2729 97.6131 34.7688 97.6891 38.2292C97.7094 39.2223 97.6891 40.2153 97.6891 41.4769H97.6942ZM13.2353 113.634C13.2353 129.503 13.2455 145.371 13.2252 161.244C13.2252 163.418 13.6711 165.343 15.8041 166.301C17.9269 167.253 19.6445 166.351 21.2759 164.882C26.3526 160.322 31.5255 155.874 36.597 151.309C38.9834 149.161 41.6788 148.223 44.8707 148.244C54.5477 148.304 64.2248 148.309 73.9018 148.254C93.4231 148.142 109.702 136.018 115.245 117.216C119.956 101.236 124.197 85.1199 129.015 69.1705C131.478 61.0134 125.388 54.432 118.031 54.4877C87.1457 54.7056 56.2602 54.6904 25.3747 54.4877C19.1277 54.4472 13.1036 58.4092 13.1897 66.7791C13.3468 82.3941 13.2353 98.0091 13.2353 113.629V113.634ZM86.8974 41.3553C86.8974 37.9354 87.0089 34.7384 86.8772 31.5516C86.5175 22.8321 81.0051 15.3032 73.0456 12.471C64.6352 9.4818 55.8042 11.8175 49.8764 18.5103C43.9536 25.1981 44.6984 33.2286 45.0176 41.3553H86.8924H86.8974Z" fill="currentColor"></path>
+              <path d="M97.6635 97.9939C96.7869 114.572 84.4702 127.643 69.6405 129.148C52.3384 130.901 37.7823 119.359 34.636 103.825C34.1698 101.53 33.9621 99.144 33.957 96.7982C33.952 93.6164 36.3586 91.2199 39.2668 91.1541C42.104 91.0882 44.4194 93.2161 44.8045 96.3219C45.0325 98.156 44.9514 100.051 45.3516 101.839C47.7278 112.423 57.1617 119.344 67.8065 118.427C78.208 117.53 86.431 108.715 86.9022 97.9432C86.9326 97.2694 86.8768 96.5854 86.9528 95.9217C87.2568 93.2415 89.633 91.1439 92.3031 91.1591C94.8667 91.1743 97.1771 93.1503 97.5469 95.7291C97.6888 96.7222 97.6533 97.7456 97.6635 97.9939V97.9939Z" fill="currentColor"></path>
+            </svg>
+            <span className={styles.logoText}>Spur</span>
+          </div>
+          <h1 className={styles.heading}>AI-Powered Customer Support</h1>
+          <p className={styles.subheading}>
+            Get instant answers to your questions with our intelligent chat assistant.
+            Available 24/7 to help you with shipping, returns, and more.
+          </p>
+          <div className={styles.features}>
+            <div className={styles.feature}>
+              <span className={styles.featureIcon}>🚀</span>
+              <span>Instant responses</span>
+            </div>
+            <div className={styles.feature}>
+              <span className={styles.featureIcon}>💬</span>
+              <span>24/7 support</span>
+            </div>
+          </div>
+        </div>
+        <div className={styles.rightSection}>
+          {isChatOpen && (
+            <div className={styles.chatContainer}>
+              <button
+                className={styles.closeButton}
+                onClick={() => setIsChatOpen(false)}
+                aria-label="Close chat"
+              >
+                ×
+              </button>
+              <ChatWidget />
+            </div>
+          )}
+        </div>
+      </div>
+      <FloatingChatButton
+        onClick={() => setIsChatOpen(true)}
+        isOpen={isChatOpen}
+      />
+    </main>
+  );
+}
+
