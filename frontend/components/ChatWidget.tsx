@@ -173,7 +173,7 @@ export default function ChatWidget() {
     }
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       sendMessage();
@@ -319,11 +319,13 @@ export default function ChatWidget() {
 
       <div className={styles.inputContainer}>
         <textarea
+          id="chat-message-input"
+          name="message"
           ref={inputRef}
           className={styles.input}
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          onKeyPress={handleKeyPress}
+          onKeyDown={handleKeyDown}
           placeholder="Type your message..."
           rows={1}
           disabled={isLoading}
