@@ -17,13 +17,20 @@ export default function ChatWidget() {
   const [isLoading, setIsLoading] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [hasShownWelcome, setHasShownWelcome] = useState(false);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const hasLoadedRef = useRef(false);
+  const isInitialLoadRef = useRef(true);
+  const justSentMessageRef = useRef(false);
 
   // Load session and messages from localStorage on mount
   useEffect(() => {
+    if (hasLoadedRef.current) return;
+    hasLoadedRef.current = true;
+
     const loadConversation = async () => {
       setIsInitialLoading(true);
       const savedSessionId = localStorage.getItem("spur_chat_sessionId");
@@ -48,21 +55,6 @@ export default function ChatWidget() {
             setHasShownWelcome(true);
           } else {
             // No messages yet, show welcome message
-            if (!hasShownWelcome) {
-              const welcomeMessage: Message = {
-                id: "welcome",
-                sender: "ai",
-                text: "Hey 👋, how can we help you today?",
-                timestamp: new Date(),
-              };
-              setMessages([welcomeMessage]);
-              setHasShownWelcome(true);
-            }
-          }
-        } catch (error) {
-          // Error fetching history, show welcome message
-          // Axios interceptor handles error formatting
-          if (!hasShownWelcome) {
             const welcomeMessage: Message = {
               id: "welcome",
               sender: "ai",
@@ -72,10 +64,9 @@ export default function ChatWidget() {
             setMessages([welcomeMessage]);
             setHasShownWelcome(true);
           }
-        }
-      } else {
-        // Show welcome message only if no existing session
-        if (!hasShownWelcome) {
+        } catch (error) {
+          // Error fetching history, show welcome message
+          // Axios interceptor handles error formatting
           const welcomeMessage: Message = {
             id: "welcome",
             sender: "ai",
@@ -85,17 +76,152 @@ export default function ChatWidget() {
           setMessages([welcomeMessage]);
           setHasShownWelcome(true);
         }
+      } else {
+        // Show welcome message only if no existing session
+        const welcomeMessage: Message = {
+          id: "welcome",
+          sender: "ai",
+          text: "Hey 👋, how can we help you today?",
+          timestamp: new Date(),
+        };
+        setMessages([welcomeMessage]);
+        setHasShownWelcome(true);
       }
       setIsInitialLoading(false);
     };
 
     loadConversation();
-  }, [hasShownWelcome]);
+  }, []); // Empty dependency array - only run once on mount
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
+    if (!isInitialLoading && messages.length > 0) {
+      if (isInitialLoadRef.current) {
+        // On initial load, scroll instantly to bottom (no animation)
+        // Use requestAnimationFrame to ensure DOM has fully rendered
+        requestAnimationFrame(() => {
+          messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
+          isInitialLoadRef.current = false;
+          setShowScrollToBottom(false);
+        });
+      } else {
+        // If user just sent a message, always scroll to bottom
+        if (justSentMessageRef.current) {
+          requestAnimationFrame(() => {
+            messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+            setShowScrollToBottom(false);
+            justSentMessageRef.current = false;
+          });
+        } else {
+          // For other message updates (like AI responses), only auto-scroll if user is near bottom
+          const container = messagesContainerRef.current;
+          if (container) {
+            const isNearBottom =
+              container.scrollHeight -
+                container.scrollTop -
+                container.clientHeight <
+              5;
+            if (isNearBottom) {
+              messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+              setShowScrollToBottom(false);
+            } else {
+              // User has scrolled up, show scroll to bottom button
+              setShowScrollToBottom(true);
+            }
+          }
+        }
+      }
+    }
+  }, [messages, isInitialLoading]);
+
+  // Track scroll position to show/hide scroll to bottom button
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container || isInitialLoading) return;
+
+    const handleScroll = () => {
+      const scrollTop = container.scrollTop;
+      const scrollHeight = container.scrollHeight;
+      const clientHeight = container.clientHeight;
+
+      // Calculate distance from bottom
+      const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+
+      // Show button if user has scrolled up at all (more than 5px from bottom)
+      // This ensures it appears as soon as user starts scrolling up
+      const isNearBottom = distanceFromBottom <= 5;
+      setShowScrollToBottom(!isNearBottom);
+    };
+
+    container.addEventListener("scroll", handleScroll, { passive: true });
+    // Check initial scroll position
+    handleScroll();
+    return () => container.removeEventListener("scroll", handleScroll);
+  }, [isInitialLoading]);
+
+  // Scroll to bottom handler
+  const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    setShowScrollToBottom(false);
+  };
+
+  // Handle quick question chip click
+  const handleQuickQuestion = (question: string) => {
+    if (isLoading) return;
+    setInput(question);
+    // Use the existing sendMessage logic by setting input and triggering send
+    const trimmedInput = question.trim();
+    if (!trimmedInput) return;
+
+    justSentMessageRef.current = true;
+
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      sender: "user",
+      text: trimmedInput,
+      timestamp: new Date(),
+    };
+
+    setMessages((prev) => [...prev, userMessage]);
+    setInput("");
+    setIsLoading(true);
+
+    apiClient
+      .post("/chat/message", {
+        message: trimmedInput,
+        sessionId: sessionId || undefined,
+      })
+      .then((response) => {
+        const data = response.data;
+
+        const aiMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          sender: "ai",
+          text: data.reply,
+          timestamp: new Date(),
+        };
+
+        setMessages((prev) => [...prev, aiMessage]);
+
+        if (data.sessionId) {
+          setSessionId(data.sessionId);
+          localStorage.setItem("spur_chat_sessionId", data.sessionId);
+        }
+      })
+      .catch(() => {
+        const errorMsg: Message = {
+          id: (Date.now() + 2).toString(),
+          sender: "ai",
+          text: "I'm having trouble responding right now. Please try again in a moment.",
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, errorMsg]);
+      })
+      .finally(() => {
+        setIsLoading(false);
+        inputRef.current?.focus();
+      });
+  };
 
   // Focus input on mount
   useEffect(() => {
@@ -118,6 +244,9 @@ export default function ChatWidget() {
     const trimmedInput = input.trim();
     if (!trimmedInput || isLoading) return;
 
+    // Mark that user just sent a message - this will trigger auto-scroll
+    justSentMessageRef.current = true;
+
     const userMessage: Message = {
       id: Date.now().toString(),
       sender: "user",
@@ -128,7 +257,6 @@ export default function ChatWidget() {
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setIsLoading(true);
-    setError(null);
 
     try {
       const response = await apiClient.post("/chat/message", {
@@ -153,17 +281,11 @@ export default function ChatWidget() {
         localStorage.setItem("spur_chat_sessionId", data.sessionId);
       }
     } catch (err) {
-      const errorMessage =
-        err instanceof Error
-          ? err.message
-          : "Failed to send message. Please try again.";
-      setError(errorMessage);
-
-      // Add error message to chat
+      // Show error as an AI message in the chat (better UX than error banner)
       const errorMsg: Message = {
         id: (Date.now() + 2).toString(),
         sender: "ai",
-        text: `Sorry, I encountered an error: ${errorMessage}`,
+        text: "I'm having trouble responding right now. Please try again in a moment.",
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, errorMsg]);
@@ -203,7 +325,7 @@ export default function ChatWidget() {
         <h1 className={styles.title}>Spur Support</h1>
       </div>
 
-      <div className={styles.messagesContainer}>
+      <div ref={messagesContainerRef} className={styles.messagesContainer}>
         {isInitialLoading && (
           <div className={styles.loaderContainer}>
             <div className={styles.loader}>
@@ -284,6 +406,39 @@ export default function ChatWidget() {
             </div>
           ))}
 
+        {/* Quick question chips - show only if welcome message is the last message */}
+        {!isInitialLoading &&
+          messages.length > 0 &&
+          messages[messages.length - 1].id === "welcome" &&
+          !isLoading && (
+            <div className={styles.quickQuestions}>
+              <button
+                className={styles.quickQuestionChip}
+                onClick={() =>
+                  handleQuickQuestion("What's your return policy?")
+                }
+              >
+                What's your return policy?
+              </button>
+              <button
+                className={styles.quickQuestionChip}
+                onClick={() =>
+                  handleQuickQuestion("Do you ship internationally?")
+                }
+              >
+                Do you ship internationally?
+              </button>
+              <button
+                className={styles.quickQuestionChip}
+                onClick={() =>
+                  handleQuickQuestion("How long does delivery take?")
+                }
+              >
+                How long does delivery take?
+              </button>
+            </div>
+          )}
+
         {!isInitialLoading && isLoading && (
           <div className={`${styles.message} ${styles.aiMessage}`}>
             <div className={styles.profileIcon}>
@@ -315,7 +470,26 @@ export default function ChatWidget() {
         <div ref={messagesEndRef} />
       </div>
 
-      {error && <div className={styles.errorBanner}>{error}</div>}
+      {showScrollToBottom && (
+        <button
+          className={styles.scrollToBottomButton}
+          onClick={scrollToBottom}
+          aria-label="Scroll to bottom"
+        >
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M12 5v14M19 12l-7 7-7-7" />
+          </svg>
+        </button>
+      )}
 
       <div className={styles.inputContainer}>
         <textarea

@@ -13,13 +13,56 @@ A production-quality, end-to-end AI live chat support widget built with Node.js,
   ```
   backend/
   ├── src/
-  │   ├── db/           # Prisma client setup
-  │   ├── services/     # Business logic (chat, LLM)
-  │   ├── routes/       # API route handlers
-  │   └── index.ts      # Express server entry
+  │   ├── db/              # Prisma client setup with connection pooling
+  │   ├── services/        # Business logic layer
+  │   │   ├── chat.service.ts    # Conversation & message management
+  │   │   └── llm.service.ts     # OpenAI integration & prompt handling
+  │   ├── routes/         # API route handlers (thin controllers)
+  │   │   └── chat.routes.ts     # POST /chat/message, GET /chat/history/:id
+  │   ├── middleware/      # Express middleware
+  │   │   ├── rateLimiter.ts    # Multi-layer rate limiting
+  │   │   └── timeout.ts        # Request timeout handling
+  │   ├── utils/          # Utility functions
+  │   │   └── validation.ts       # Input validation & sanitization
+  │   └── index.ts        # Express server entry point
   └── prisma/
-      └── schema.prisma # Database schema
+      ├── schema.prisma   # Database schema
+      └── migrations/     # Database migration history
   ```
+
+#### Backend Architecture Layers
+
+1. **Route Layer** (`routes/`): Thin controllers that handle HTTP requests/responses
+
+   - Validates request format
+   - Calls service layer
+   - Handles errors and returns appropriate status codes
+
+2. **Service Layer** (`services/`): Core business logic
+
+   - `ChatService`: Manages conversations, messages, and session handling
+   - `LLMService`: Handles OpenAI API calls, prompt construction, and response generation
+   - Both services are independent and testable
+
+3. **Data Layer** (`db/`): Database access via Prisma
+
+   - Singleton Prisma client with connection pooling
+   - Uses PostgreSQL adapter for better performance
+   - Handles connection lifecycle and timezone configuration
+
+4. **Middleware Layer** (`middleware/`): Cross-cutting concerns
+   - Rate limiting (IP-based, session-based, daily limits)
+   - Request timeout (30 seconds)
+   - CORS configuration
+   - Error handling
+
+#### Design Decisions
+
+- **Service Separation**: ChatService and LLMService are separate to allow swapping LLM providers without changing conversation logic
+- **Connection Pooling**: Uses `pg` Pool with Prisma adapter for better database performance
+- **Error Handling**: Services never throw unhandled errors; all errors are caught and returned as user-friendly messages
+- **Type Safety**: Full TypeScript coverage with strict typing throughout
+- **Stateless API**: No server-side sessions; sessionId is passed from client (stored in localStorage)
 
 ### Frontend (`/frontend`)
 
@@ -66,12 +109,37 @@ A production-quality, end-to-end AI live chat support widget built with Node.js,
    FRONTEND_URL=http://localhost:3000
    ```
 
-4. **Initialize database**:
+4. **Set up database**:
+
+   **Option A: Using local PostgreSQL**
+
+   - Install PostgreSQL if not already installed
+   - Create a database:
+     ```bash
+     createdb spur_chat
+     ```
+   - Update `DATABASE_URL` in `.env` with your PostgreSQL credentials
+
+   **Option B: Using a cloud database (e.g., Railway, Supabase)**
+
+   - Create a PostgreSQL database on your preferred platform
+   - Copy the connection string to `DATABASE_URL` in `.env`
+
+   **Run migrations:**
 
    ```bash
+   # Generate Prisma client
    npx prisma generate
+
+   # Run database migrations
    npx prisma migrate dev --name init
    ```
+
+   This will create the `Conversation` and `Message` tables in your database.
+
+   **Optional: Seed data (if needed)**
+
+   Currently, no seed data is required. The application creates conversations and messages dynamically. If you want to add seed data for testing, you can create a `prisma/seed.ts` file and run it with `npx prisma db seed`.
 
 5. **Start the server**:
    ```bash
@@ -154,36 +222,77 @@ Send a message to the AI chat support agent.
 
 ## 🤖 LLM Integration
 
-### System Prompt
+### Provider: OpenAI
 
-The AI is configured as a helpful ecommerce support agent with knowledge of:
+We use **OpenAI** as the LLM provider. The service is designed to be swappable - you could easily replace it with Anthropic, Google, or other providers by modifying `LLMService`.
 
-- **Shipping**: USA, India, Europe
-- **Delivery**: 5-7 business days
-- **Returns**: Accepted within 14 days
-- **Support Hours**: Mon-Fri, 9am-6pm IST
+**Model**: `gpt-4o-mini` (configurable via `OPENAI_MODEL` env var, defaults to `gpt-3.5-turbo`)
 
-### LLM Model
+**Why gpt-4o-mini?**
 
-I used OpenAI's `gpt-4o-mini` for a balanced tradeoff of speed, cost, and conversational ability. It provides capable contextual answers while keeping resource usage reasonable for a customer support widget.
+- Balanced performance: Good contextual understanding for support scenarios
+- Cost-effective: Lower cost than GPT-4 while maintaining quality
+- Fast response times: Optimized for real-time chat interactions
+- Production-ready: Well-suited for customer support use cases
 
-### Configuration
+### Prompting Strategy
 
-- **Model**: `gpt-4o-mini` (configured via `OPENAI_MODEL` env var)
-- **Max Tokens**: 500 (cost control)
-- **Temperature**: 0.7 (balanced creativity for support responses)
-- **History Limit**: Last 10 messages (prevents token explosion)
+#### System Prompt
+
+The system prompt is defined in `backend/src/services/llm.service.ts`:
+
+```
+You are a helpful and friendly customer support agent for an ecommerce store.
+Your goal is to assist customers with their questions and concerns in a
+professional, empathetic manner.
+
+Store Information:
+- Shipping: We ship to USA, India, and Europe
+- Delivery Time: 5-7 business days
+- Returns: Accepted within 14 days of purchase
+- Support Hours: Monday-Friday, 9am-6pm IST
+
+Guidelines:
+- Be concise but thorough
+- If you don't know something, acknowledge it and offer to help find the answer
+- Always maintain a positive, helpful tone
+- Use the customer's name if provided, otherwise use friendly language
+- For shipping/returns questions, provide clear information based on the store policies above
+```
+
+#### Message Construction
+
+1. **System Message**: Always sent first to set the AI's role and context
+2. **Conversation History**: Last 10 messages (prevents token explosion)
+   - User messages → `role: 'user'`
+   - AI responses → `role: 'assistant'`
+3. **Current User Message**: Appended to the history
+
+#### Configuration
+
+- **Max Tokens**: 500 per response (cost control, ensures concise answers)
+- **Temperature**: 0.7 (balanced creativity - not too robotic, not too creative)
+- **History Limit**: Last 10 messages only (prevents token costs from growing unbounded)
+- **Message Format**: Standard OpenAI chat completion format
+
+#### Cost Management
+
+- **Token Limits**: Max 500 tokens per response
+- **History Trimming**: Only last 10 messages sent to API
+- **Message Length**: User messages limited to 5000 characters
+- **Error Handling**: Graceful fallbacks prevent unnecessary retry costs
 
 ### Error Handling
 
 The LLM service gracefully handles:
 
-- Invalid API keys (401)
-- Rate limits (429)
-- Service outages (500/503)
-- Timeouts and network errors
+- **Invalid API keys (401)**: Returns user-friendly error message
+- **Rate limits (429)**: Returns "Rate limit exceeded" message
+- **Service outages (500/503)**: Returns "Service temporarily unavailable"
+- **Timeouts**: 30-second timeout on all requests
+- **Network errors**: Returns generic error message
 
-All errors are surfaced to users with friendly messages.
+All errors are caught and never thrown - the service always returns a string response to prevent API crashes.
 
 ## 🎨 Frontend Features
 
@@ -281,6 +390,7 @@ npm run lint         # Run ESLint
 - Better performance and scalability
 - Supports concurrent connections
 - Industry standard for production applications
+- **Trade-off**: Requires more setup than SQLite, but worth it for production scalability
 
 ### Why Separate Services?
 
@@ -288,6 +398,7 @@ npm run lint         # Run ESLint
 - LLM service is swappable (could use Anthropic, etc.)
 - Chat service handles conversation logic independently
 - Easy to test and maintain
+- **Trade-off**: Slightly more code, but much better maintainability
 
 ### Why localStorage for Sessions?
 
@@ -295,6 +406,7 @@ npm run lint         # Run ESLint
 - Simple, works offline
 - Persists across refreshes
 - Can be upgraded to server-side sessions later
+- **Trade-off**: Not secure for sensitive data, but fine for anonymous chat sessions
 
 ### Why gpt-4o-mini?
 
@@ -302,6 +414,79 @@ npm run lint         # Run ESLint
 - **Cost-Effective**: Keeps resource usage reasonable for a customer support widget
 - **Fast Response Times**: Optimized for speed while maintaining quality
 - **Production-Ready**: Well-suited for customer support use cases
+- **Trade-off**: Not as capable as GPT-4, but 10x cheaper and faster
+
+### Other Design Decisions
+
+- **Connection Pooling**: Using `pg` Pool with Prisma adapter for better database performance
+- **Rate Limiting**: Multi-layer approach (IP, session, daily) prevents abuse while allowing legitimate use
+- **History Trimming**: Only last 10 messages sent to LLM - balances context vs. cost
+- **No Streaming**: Currently sends complete response - could add streaming for better UX
+- **Error Sanitization**: Production errors are sanitized to prevent information leakage
+
+## ⏰ If I Had More Time...
+
+### Immediate Priorities
+
+1. **Testing Suite**
+
+   - Unit tests for services (Jest)
+   - Integration tests for API endpoints (Supertest)
+   - E2E tests for frontend flows (Playwright)
+   - Mock LLM responses for reliable testing
+
+2. **Streaming Responses**
+
+   - Implement Server-Sent Events (SSE) or WebSockets
+   - Stream LLM tokens as they're generated
+   - Much better UX - users see responses in real-time
+
+3. **Monitoring & Observability**
+   - Structured logging (Winston/Pino) with request IDs
+   - Error tracking (Sentry)
+   - Metrics collection (Prometheus)
+   - Performance monitoring
+
+### Enhanced Features
+
+4. **Lazy Loading Messages**
+
+   - Pagination for long conversation histories
+   - Load older messages on scroll up
+   - Better performance for conversations with 100+ messages
+
+5. **Authentication & Multi-tenancy**
+
+   - User authentication system
+   - Support for multiple organizations/tenants
+   - Admin dashboard for conversation management
+
+6. **Advanced LLM Features**
+   - Function calling for structured actions (e.g., "check order status")
+   - RAG (Retrieval Augmented Generation) for knowledge base integration
+   - Multi-modal support (images, documents)
+
+### Production Hardening
+
+7. **Infrastructure**
+
+   - Docker containerization
+   - Kubernetes deployment configs
+   - CI/CD pipeline (GitHub Actions)
+   - Automated testing on every PR
+
+8. **Scalability**
+
+   - Redis for distributed rate limiting
+   - Message queue (Bull/BullMQ) for async LLM processing
+   - Database read replicas
+   - CDN for static assets
+
+9. **Cost Optimization**
+   - Token usage tracking and analytics
+   - Cost alerts for unexpected spikes
+   - Caching for common queries
+   - Request deduplication
 
 ## 💡 Potential Enhancements
 
@@ -314,11 +499,16 @@ npm run lint         # Run ESLint
 ### Enhanced Features
 
 1. **Multi-turn Context**: Better conversation context window management
-2. **File Uploads**: Support image/document uploads
-3. **Typing Indicators**: More sophisticated typing simulation
-4. **Message Reactions**: Thumbs up/down for feedback
-5. **Admin Dashboard**: View conversations, analytics
-6. **Voice Input**: Audio-to-text (speech-to-text) integration for voice messages
+2. **Lazy Loading of Messages**: Load older messages on scroll up for conversations with many messages
+   - Implement infinite scroll/pagination when user scrolls to top
+   - Fetch previous messages in batches (e.g., 20-50 messages at a time)
+   - Maintain scroll position when loading older messages
+   - Improve performance for long conversation histories
+3. **File Uploads**: Support image/document uploads
+4. **Typing Indicators**: More sophisticated typing simulation
+5. **Message Reactions**: Thumbs up/down for feedback
+6. **Admin Dashboard**: View conversations, analytics
+7. **Voice Input**: Audio-to-text (speech-to-text) integration for voice messages
    - Use Web Speech API or OpenAI Whisper for transcription
    - Allow users to speak instead of typing
    - Improve accessibility and mobile UX

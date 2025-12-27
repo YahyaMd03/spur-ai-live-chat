@@ -57,9 +57,6 @@ export class LLMService {
         temperature: 0.7, // Balanced creativity for support responses
       });
 
-      // Log the full OpenAI response object
-      console.log('OpenAI Response Object:', JSON.stringify(response, null, 2));
-
       // Defensive response access
       const choice = response.choices?.[0];
       if (!choice || !choice.message?.content) {
@@ -88,5 +85,4 @@ export class LLMService {
     }
   }
 }
-
 
